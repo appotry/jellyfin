@@ -37,7 +37,7 @@ namespace Jellyfin.Server.Implementations.Tests.Data
             yield return new object[]
             {
                 "/mnt/series/Family Guy/Season 1/Family Guy - S01E01-thumb.jpg*637452096478512963*Primary*1920*1080*WjQbtJtSO8nhNZ%L_Io#R/oaS6o}-;adXAoIn7j[%hW9s:WGw[nN",
-                new ItemImageInfo()
+                new ItemImageInfo
                 {
                     Path = "/mnt/series/Family Guy/Season 1/Family Guy - S01E01-thumb.jpg",
                     Type = ImageType.Primary,
@@ -51,7 +51,27 @@ namespace Jellyfin.Server.Implementations.Tests.Data
             yield return new object[]
             {
                 "https://image.tmdb.org/t/p/original/zhB5CHEgqqh4wnEqDNJLfWXJlcL.jpg*0*Primary*0*0",
-                new ItemImageInfo()
+                new ItemImageInfo
+                {
+                    Path = "https://image.tmdb.org/t/p/original/zhB5CHEgqqh4wnEqDNJLfWXJlcL.jpg",
+                    Type = ImageType.Primary,
+                }
+            };
+
+            yield return new object[]
+            {
+                "https://image.tmdb.org/t/p/original/zhB5CHEgqqh4wnEqDNJLfWXJlcL.jpg*0*Primary",
+                new ItemImageInfo
+                {
+                    Path = "https://image.tmdb.org/t/p/original/zhB5CHEgqqh4wnEqDNJLfWXJlcL.jpg",
+                    Type = ImageType.Primary,
+                }
+            };
+
+            yield return new object[]
+            {
+                "https://image.tmdb.org/t/p/original/zhB5CHEgqqh4wnEqDNJLfWXJlcL.jpg*0*Primary*600",
+                new ItemImageInfo
                 {
                     Path = "https://image.tmdb.org/t/p/original/zhB5CHEgqqh4wnEqDNJLfWXJlcL.jpg",
                     Type = ImageType.Primary,
@@ -61,7 +81,7 @@ namespace Jellyfin.Server.Implementations.Tests.Data
             yield return new object[]
             {
                 "%MetadataPath%/library/68/68578562b96c80a7ebd530848801f645/poster.jpg*637264380567586027*Primary*600*336",
-                new ItemImageInfo()
+                new ItemImageInfo
                 {
                     Path = "/meta/data/path/library/68/68578562b96c80a7ebd530848801f645/poster.jpg",
                     Type = ImageType.Primary,
@@ -88,6 +108,7 @@ namespace Jellyfin.Server.Implementations.Tests.Data
         [Theory]
         [InlineData("")]
         [InlineData("*")]
+        [InlineData("https://image.tmdb.org/t/p/original/zhB5CHEgqqh4wnEqDNJLfWXJlcL.jpg*0")]
         public void ItemImageInfoFromValueString_Invalid_Null(string value)
         {
             Assert.Null(_sqliteItemRepository.ItemImageInfoFromValueString(value));
@@ -145,9 +166,58 @@ namespace Jellyfin.Server.Implementations.Tests.Data
             };
         }
 
+        public static IEnumerable<object[]> DeserializeImages_ValidAndInvalid_TestData()
+        {
+            yield return new object[]
+            {
+                string.Empty,
+                Array.Empty<ItemImageInfo>()
+            };
+
+            yield return new object[]
+            {
+                "/mnt/series/Family Guy/Season 1/Family Guy - S01E01-thumb.jpg*637452096478512963*Primary*1920*1080*WjQbtJtSO8nhNZ%L_Io#R/oaS6o}-;adXAoIn7j[%hW9s:WGw[nN|test|1234||ss",
+                new ItemImageInfo[]
+                {
+                    new ()
+                    {
+                        Path = "/mnt/series/Family Guy/Season 1/Family Guy - S01E01-thumb.jpg",
+                        Type = ImageType.Primary,
+                        DateModified = new DateTime(637452096478512963, DateTimeKind.Utc),
+                        Width = 1920,
+                        Height = 1080,
+                        BlurHash = "WjQbtJtSO8nhNZ%L_Io#R*oaS6o}-;adXAoIn7j[%hW9s:WGw[nN"
+                    }
+                }
+            };
+
+            yield return new object[]
+            {
+                "|",
+                Array.Empty<ItemImageInfo>()
+            };
+        }
+
         [Theory]
         [MemberData(nameof(DeserializeImages_Valid_TestData))]
         public void DeserializeImages_Valid_Success(string value, ItemImageInfo[] expected)
+        {
+            var result = _sqliteItemRepository.DeserializeImages(value);
+            Assert.Equal(expected.Length, result.Length);
+            for (int i = 0; i < expected.Length; i++)
+            {
+                Assert.Equal(expected[i].Path, result[i].Path);
+                Assert.Equal(expected[i].Type, result[i].Type);
+                Assert.Equal(expected[i].DateModified, result[i].DateModified);
+                Assert.Equal(expected[i].Width, result[i].Width);
+                Assert.Equal(expected[i].Height, result[i].Height);
+                Assert.Equal(expected[i].BlurHash, result[i].BlurHash);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(DeserializeImages_ValidAndInvalid_TestData))]
+        public void DeserializeImages_ValidAndInvalid_Success(string value, ItemImageInfo[] expected)
         {
             var result = _sqliteItemRepository.DeserializeImages(value);
             Assert.Equal(expected.Length, result.Length);
@@ -167,6 +237,63 @@ namespace Jellyfin.Server.Implementations.Tests.Data
         public void SerializeImages_Valid_Success(string expected, ItemImageInfo[] value)
         {
             Assert.Equal(expected, _sqliteItemRepository.SerializeImages(value));
+        }
+
+        public static IEnumerable<object[]> DeserializeProviderIds_Valid_TestData()
+        {
+            yield return new object[]
+            {
+                "Imdb=tt0119567",
+                new Dictionary<string, string>()
+                {
+                    { "Imdb", "tt0119567" },
+                }
+            };
+
+            yield return new object[]
+            {
+                "Imdb=tt0119567|Tmdb=330|TmdbCollection=328",
+                new Dictionary<string, string>()
+                {
+                    { "Imdb", "tt0119567" },
+                    { "Tmdb", "330" },
+                    { "TmdbCollection", "328" },
+                }
+            };
+
+            yield return new object[]
+            {
+                "MusicBrainzAlbum=9d363e43-f24f-4b39-bc5a-7ef305c677c7|MusicBrainzReleaseGroup=63eba062-847c-3b73-8b0f-6baf27bba6fa|AudioDbArtist=111352|AudioDbAlbum=2116560|MusicBrainzAlbumArtist=20244d07-534f-4eff-b4d4-930878889970",
+                new Dictionary<string, string>()
+                {
+                    { "MusicBrainzAlbum", "9d363e43-f24f-4b39-bc5a-7ef305c677c7" },
+                    { "MusicBrainzReleaseGroup", "63eba062-847c-3b73-8b0f-6baf27bba6fa" },
+                    { "AudioDbArtist", "111352" },
+                    { "AudioDbAlbum", "2116560" },
+                    { "MusicBrainzAlbumArtist", "20244d07-534f-4eff-b4d4-930878889970" },
+                }
+            };
+        }
+
+        [Theory]
+        [MemberData(nameof(DeserializeProviderIds_Valid_TestData))]
+        public void DeserializeProviderIds_Valid_Success(string value, Dictionary<string, string> expected)
+        {
+            var result = new ProviderIdsExtensionsTestsObject();
+            SqliteItemRepository.DeserializeProviderIds(value, result);
+            Assert.Equal(expected, result.ProviderIds);
+        }
+
+        [Theory]
+        [MemberData(nameof(DeserializeProviderIds_Valid_TestData))]
+        public void SerializeProviderIds_Valid_Success(string expected, Dictionary<string, string> values)
+        {
+            Assert.Equal(expected, SqliteItemRepository.SerializeProviderIds(values));
+        }
+
+        private class ProviderIdsExtensionsTestsObject : IHasProviderIds
+        {
+            public Dictionary<string, string> ProviderIds { get; set; } = new Dictionary<string, string>();
         }
     }
 }
